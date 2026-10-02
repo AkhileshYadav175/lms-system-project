@@ -32,7 +32,24 @@ export const adminLogin = async (req, res) => {
     if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
 
     const sessionId = crypto.randomUUID();
-    admin.currentSessionId = sessionId;
+    
+    if (!admin.activeSessions) {
+      admin.activeSessions = [];
+    }
+    
+    // Fallback: If they have a currentSessionId but no activeSessions yet, migrate it
+    if (admin.currentSessionId && admin.activeSessions.length === 0) {
+      admin.activeSessions.push(admin.currentSessionId);
+    }
+
+    admin.activeSessions.push(sessionId);
+    
+    // Keep only the last 3 sessions
+    if (admin.activeSessions.length > 3) {
+      admin.activeSessions = admin.activeSessions.slice(-3);
+    }
+    
+    admin.currentSessionId = sessionId; // keep for backward compatibility just in case
     await admin.save();
 
     const token = generateTokenAndSetCookie(res, { role: 'admin', userId: admin._id, sessionId });

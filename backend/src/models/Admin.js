@@ -19,6 +19,10 @@ const AdminSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    activeSessions: {
+      type: [String],
+      default: [],
+    },
   },
   {
     timestamps: true,

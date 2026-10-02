@@ -20,8 +20,13 @@ export const verifyAdmin = async (req, res, next) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default_jwt_secret');
       if (decoded.role === 'admin') {
         const admin = await Admin.findById(decoded.userId);
-        if (admin && admin.currentSessionId && decoded.sessionId && admin.currentSessionId !== decoded.sessionId) {
-          return res.status(401).json({ success: false, message: 'SESSION_CONFLICT' });
+        if (admin && decoded.sessionId) {
+          const isActiveSession = admin.activeSessions && admin.activeSessions.includes(decoded.sessionId);
+          const isCurrentSession = admin.currentSessionId === decoded.sessionId;
+          
+          if (!isActiveSession && !isCurrentSession) {
+            return res.status(401).json({ success: false, message: 'SESSION_CONFLICT' });
+          }
         }
         req.user = decoded;
         return next();
