@@ -98,7 +98,7 @@ export const uploadVideo = async (req, res) => {
 export const getCourseVideos = async (req, res) => {
   try {
     const { courseId } = req.params;
-    const videos = await Video.find({ courseId }).sort({ createdAt: -1 });
+    const videos = await Video.find({ courseId }).sort({ createdAt: -1 }).lean();
     res.status(200).json(videos);
   } catch (error) {
     console.error("Get course videos error:", error);
@@ -258,7 +258,7 @@ export const completeMultipartUpload = async (req, res) => {
     // Queue for HLS processing
     await videoQueue.add('process-video', { videoId: video._id.toString() });
 
-    res.status(200).json(video);
+    res.status(201).json(video);
   } catch (error) {
     console.error("[PROCESS][ERROR] Complete multipart error:", error.message);
     res.status(500).json({ error: "Failed to complete multipart upload" });
@@ -278,7 +278,7 @@ export const abortMultipartUpload = async (req, res) => {
     });
 
     await r2Client.send(command);
-    res.status(200).json({ message: "Multipart upload aborted" });
+    res.status(200).json({ message: "Multipart upload aborted successfully" });
   } catch (error) {
     console.error("Abort multipart error:", error);
     res.status(500).json({ error: "Failed to abort multipart upload" });
@@ -393,6 +393,29 @@ export const getPlaybackUrl = async (req, res) => {
   }
 };
 
+// Fast in-memory cache for raw static HLS playlists fetched from R2
+// Map<r2Key, { content: string, cachedAt: number }>
+const r2PlaylistCache = new Map();
+const R2_PLAYLIST_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+const getCachedR2Object = async (key) => {
+  const now = Date.now();
+  const cached = r2PlaylistCache.get(key);
+  if (cached && (now - cached.cachedAt < R2_PLAYLIST_CACHE_TTL_MS)) {
+    return cached.content;
+  }
+
+  const command = new GetObjectCommand({
+    Bucket: process.env.R2_BUCKET_NAME,
+    Key: key,
+  });
+  const response = await r2Client.send(command);
+  const content = await response.Body.transformToString();
+
+  r2PlaylistCache.set(key, { content, cachedAt: now });
+  return content;
+};
+
 // Get HLS Master Playlist
 export const getHlsMasterPlaylist = async (req, res) => {
   try {
@@ -406,24 +429,23 @@ export const getHlsMasterPlaylist = async (req, res) => {
       return res.status(403).json({ error: "Unauthorized role" });
     }
 
-    const video = await Video.findOne({ _id: videoId, courseId });
+    const video = await Video.findOne({ _id: videoId, courseId }).select('_id hlsReady hlsMasterPlaylist').lean();
     if (!video || !video.hlsReady || !video.hlsMasterPlaylist) {
       return res.status(404).json({ error: "HLS not ready or found" });
     }
 
-    const command = new GetObjectCommand({
-      Bucket: process.env.R2_BUCKET_NAME,
-      Key: video.hlsMasterPlaylist,
-    });
-    const response = await r2Client.send(command);
-    let masterPlaylistContent = await response.Body.transformToString();
+    let masterPlaylistContent = await getCachedR2Object(video.hlsMasterPlaylist);
     
-    const apiBase = process.env.API_BASE_URL || 'https://lmsoffline.jainscomputer.com/api';
-    const hlsBase = `${apiBase}/courses/${courseId}/videos/${videoId}/hls`;
-    const tokenQuery = req.query.token ? `?token=${req.query.token}` : '';
-    masterPlaylistContent = masterPlaylistContent.replace(/([a-zA-Z0-9_-]+\.m3u8)/g, `${hlsBase}/$1${tokenQuery}`);
+    // Always preserve and propagate token to variant playlists for seamless playback across browsers & Safari
+    const token = req.query.token || req.token;
+    const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : '';
+    
+    // Use relative URIs for renditions with tokenQuery attached
+    // This resolves dynamically to the current host/protocol/path without any domain mismatch
+    masterPlaylistContent = masterPlaylistContent.replace(/([a-zA-Z0-9_-]+\.m3u8)/g, `$1${tokenQuery}`);
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.status(200).send(masterPlaylistContent);
   } catch (error) {
     console.error("Get HLS master error:", error);
@@ -444,35 +466,27 @@ export const getHlsVariantPlaylist = async (req, res) => {
       return res.status(403).json({ error: "Unauthorized role" });
     }
 
-    const video = await Video.findOne({ _id: videoId, courseId });
+    const video = await Video.findOne({ _id: videoId, courseId }).select('_id hlsReady').lean();
     if (!video || !video.hlsReady) return res.status(404).json({ error: "HLS not ready" });
 
     const variantKey = `videos/${courseId}/${videoId}/hls/${rendition}`;
-    const command = new GetObjectCommand({
-      Bucket: process.env.R2_BUCKET_NAME,
-      Key: variantKey,
-    });
-    
-    const response = await r2Client.send(command);
-    let playlistContent = await response.Body.transformToString();
+    let playlistContent = await getCachedR2Object(variantKey);
 
     const lines = playlistContent.split('\n');
-    const r2PublicDomain = process.env.R2_PUBLIC_DOMAIN;
-    
-    if (!r2PublicDomain) {
-      console.warn("R2_PUBLIC_DOMAIN is not set in environment variables. Segment playback might fail if not fully configured.");
-    }
+    const rawDomain = process.env.R2_PUBLIC_DOMAIN || 'https://pub-6c3d894287cf4ca6b6f2dd0c001e54b6.r2.dev';
+    const r2PublicDomain = rawDomain.replace(/\/+$/, '');
     
     const transformedLines = lines.map((line) => {
       const trimmed = line.trim();
       if (trimmed && !trimmed.startsWith('#')) {
-        // Use public domain for fast segment loading instead of generating individual presigned URLs
+        // Use clean public domain for fast segment loading
         return `${r2PublicDomain}/videos/${courseId}/${videoId}/hls/${trimmed}`;
       }
       return line;
     });
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.status(200).send(transformedLines.join('\n'));
   } catch (error) {
     console.error("Get HLS variant error:", error);

@@ -4,6 +4,7 @@ import Student from "../models/Student.js";
 import Course from "../models/Course.js";
 import Video from "../models/Video.js";
 import CourseAccess from "../models/CourseAccess.js";
+import { invalidateUserSessionCache } from "../middleware/authMiddleware.js";
 
 export const getDashboardStats = async (req, res) => {
   try {
@@ -100,6 +101,8 @@ export const changeAdminPassword = async (req, res) => {
 
     admin.password = hashedPassword;
     await admin.save();
+
+    invalidateUserSessionCache(adminId);
 
     res.status(200).json({ success: true, message: "Password updated successfully" });
   } catch (error) {

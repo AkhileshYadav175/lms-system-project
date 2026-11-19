@@ -48,7 +48,7 @@ export const getCourses = async (req, res) => {
 export const getCourseById = async (req, res) => {
   try {
     const { id } = req.params;
-    const course = await Course.findById(id);
+    const course = await Course.findById(id).lean();
     if (!course) return res.status(404).json({ error: 'Course not found' });
 
     if (req.user?.role !== 'admin' && course.status === 'inactive') {

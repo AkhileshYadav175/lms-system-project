@@ -3,10 +3,12 @@ import crypto from 'crypto';
 import Student from '../models/Student.js';
 import Counter from '../models/Counter.js';
 import CourseAccess from '../models/CourseAccess.js';
+import { invalidateUserSessionCache } from '../middleware/authMiddleware.js';
+import { encryptPassword, decryptPassword } from '../utils/passwordVault.js';
 
 export const getStudents = async (req, res) => {
   try {
-    const students = await Student.find().select('-password').sort({ createdAt: -1 });
+    const students = await Student.find().select('-password -plainPassword').sort({ createdAt: -1 });
     res.status(200).json(students);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch students' });
@@ -16,9 +18,12 @@ export const getStudents = async (req, res) => {
 export const getStudentById = async (req, res) => {
   try {
     const { id } = req.params;
-    const student = await Student.findById(id).select('-password');
+    const student = await Student.findById(id).select('-password +passwordEnc +plainPassword').lean();
     if (!student) return res.status(404).json({ error: 'Student not found' });
-    res.status(200).json(student);
+
+    // Admin detail view shows the student's current password (decrypted; legacy plain copy as fallback)
+    const { passwordEnc, plainPassword, ...rest } = student;
+    res.status(200).json({ ...rest, plainPassword: decryptPassword(passwordEnc) || plainPassword || '' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch student details' });
   }
@@ -48,7 +53,7 @@ export const createStudent = async (req, res) => {
     const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
     const student = await Student.create({
-      studentId, name, phone, password: hashedPassword, plainPassword: rawPassword, status: 'active', assignedCourses: []
+      studentId, name, phone, password: hashedPassword, passwordEnc: encryptPassword(rawPassword), status: 'active', assignedCourses: []
     });
 
     if (courseIds && Array.isArray(courseIds) && courseIds.length > 0) {
@@ -79,19 +84,37 @@ export const createStudent = async (req, res) => {
 export const updateStudent = async (req, res) => {
   try {
     const { id } = req.params;
-    let updateData = { ...req.body };
-    
+    // Only these fields may be changed from the admin panel (never sessions, IDs, ERP flags, ...)
+    const ALLOWED_FIELDS = ['name', 'phone', 'status', 'password'];
+    const updateData = {};
+    for (const key of ALLOWED_FIELDS) {
+      if (req.body[key] !== undefined && req.body[key] !== '') updateData[key] = req.body[key];
+    }
+
     if (updateData.phone && !/^\d{10}$/.test(updateData.phone)) {
       return res.status(400).json({ error: 'Phone number must be exactly 10 digits' });
     }
-
-    if (updateData.password) {
-      updateData.plainPassword = updateData.password;
-      updateData.password = await bcrypt.hash(updateData.password, 10);
+    if (updateData.status && !['active', 'blocked'].includes(updateData.status)) {
+      return res.status(400).json({ error: 'Status must be active or blocked' });
     }
 
-    const student = await Student.findByIdAndUpdate(id, updateData, { new: true }).select('-password');
+    const unset = {};
+    if (updateData.password) {
+      if (String(updateData.password).length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters' });
+      }
+      updateData.passwordEnc = encryptPassword(String(updateData.password));
+      updateData.password = await bcrypt.hash(String(updateData.password), 10);
+      unset.plainPassword = 1; // drop any legacy plain-text copy
+      updateData.currentSessionId = crypto.randomUUID(); // invalidates every existing login
+    }
+    if (updateData.status === 'blocked') updateData.currentSessionId = crypto.randomUUID();
+
+    const update = Object.keys(unset).length ? { $set: updateData, $unset: unset } : updateData;
+    const student = await Student.findByIdAndUpdate(id, update, { new: true, runValidators: true }).select('-password -plainPassword');
     if (!student) return res.status(404).json({ error: 'Student not found' });
+
+    invalidateUserSessionCache(id);
 
     res.status(200).json(student);
   } catch (error) {
@@ -104,6 +127,7 @@ export const deleteStudent = async (req, res) => {
     const { id } = req.params;
     const student = await Student.findByIdAndDelete(id);
     if (!student) return res.status(404).json({ error: 'Student not found' });
+    invalidateUserSessionCache(id);
     res.status(200).json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete student' });

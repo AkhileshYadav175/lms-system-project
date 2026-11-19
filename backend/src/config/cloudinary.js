@@ -3,10 +3,10 @@ import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import multer from 'multer';
 import dotenv from 'dotenv';
 
-dotenv.config();
+dotenv.config({ quiet: true });
 
 if (!process.env.CLOUDINARY_CLOUD_NAME) {
-  console.warn("WARNING: Cloudinary credentials are not set in .env. Video uploads will fail.");
+  console.info("[Cloudinary] Not configured — legacy Cloudinary videos cannot be deleted. New uploads use R2, so this is safe to ignore.");
 }
 
 cloudinary.config({

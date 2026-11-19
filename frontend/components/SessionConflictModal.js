@@ -22,7 +22,7 @@ export default function SessionConflictModal() {
     
     // Determine if admin or student based on path
     const isStudent = window.location.pathname.startsWith("/student");
-    const targetLogin = isStudent ? "/student/login" : "/admin/login";
+    const targetLogin = isStudent ? "/student/login/" : "/portal-mgmt-hq-8x9q2/admin/login/";
     
     window.location.href = targetLogin;
   };

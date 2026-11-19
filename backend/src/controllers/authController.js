@@ -3,9 +3,13 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import Admin from '../models/Admin.js';
 import Student from '../models/Student.js';
+import { invalidateUserSessionCache } from '../middleware/authMiddleware.js';
+import { registerStudent } from '../services/authService.js';
+import { processFeeSyncJob } from '../services/feeService.js';
+import { getJwtSecret } from '../config/secrets.js';
 
 const generateTokenAndSetCookie = (res, payload) => {
-  const secret = process.env.JWT_SECRET || 'default_jwt_secret';
+  const secret = getJwtSecret();
   const token = jwt.sign(payload, secret, { expiresIn: '7d' });
   
   const cookieName = payload.role === 'admin' ? 'admin_token' : 'student_token';
@@ -51,6 +55,7 @@ export const adminLogin = async (req, res) => {
     
     admin.currentSessionId = sessionId; // keep for backward compatibility just in case
     await admin.save();
+    invalidateUserSessionCache(admin._id);
 
     const token = generateTokenAndSetCookie(res, { role: 'admin', userId: admin._id, sessionId });
     res.status(200).json({ success: true, message: 'Admin logged in successfully', token });
@@ -64,7 +69,15 @@ export const studentLogin = async (req, res) => {
     const { studentId, password } = req.body;
     if (!studentId || !password) return res.status(400).json({ error: 'Student ID and password are required' });
 
-    const student = await Student.findOne({ studentId });
+    const cleanId = String(studentId).trim();
+    const student = await Student.findOne({
+      $or: [
+        { studentId: cleanId },
+        { enrollmentNumber: cleanId },
+        { enrollmentNumber: cleanId.toUpperCase() },
+        { studentId: cleanId.toUpperCase() }
+      ]
+    });
     if (!student) return res.status(401).json({ error: 'Invalid credentials' });
     if (student.status === 'blocked') return res.status(403).json({ error: 'Your account has been blocked' });
 
@@ -74,11 +87,44 @@ export const studentLogin = async (req, res) => {
     const sessionId = crypto.randomUUID();
     student.currentSessionId = sessionId;
     await student.save();
+    invalidateUserSessionCache(student._id);
 
     const token = generateTokenAndSetCookie(res, { role: 'student', userId: student._id, sessionId });
+
+    // Live Cross-Domain ERP Fee Sync on Student Login
+    processFeeSyncJob({
+      studentId: student._id,
+      enrollmentNumber: student.enrollmentNumber || student.studentId,
+    }).catch(err => {
+      console.warn('[STUDENT_LOGIN] Live fee sync deferred:', err.message);
+    });
+
     res.status(200).json({ success: true, message: 'Student logged in successfully', token });
   } catch (error) {
     res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+export const studentRegister = async (req, res) => {
+  try {
+    // Only the ERP bridge (server-to-server API key) or a logged-in admin may create accounts.
+    // The admin gateway token is NOT accepted here: it ships inside the public frontend bundle.
+    if (!req.provisioningAuthorized) {
+      return res.status(403).json({
+        success: false,
+        error: 'Public student self-registration is disabled. Student accounts are provisioned exclusively by Jains Computer administration.',
+        code: 'REGISTRATION_DISABLED',
+      });
+    }
+
+    const result = await registerStudent(req.body);
+    res.status(201).json(result);
+  } catch (error) {
+    const statusCode = error.statusCode || 400;
+    res.status(statusCode).json({
+      success: false,
+      error: error.message || 'Registration failed'
+    });
   }
 };
 

@@ -4,6 +4,14 @@ import { beforeAll, afterAll, afterEach } from 'vitest';
 
 let mongoServer;
 
+// Set at module load (before test files import the app) so nothing reads real values from .env.
+// Tests must never talk to production services: ERP runs in mock mode.
+process.env.NODE_ENV = 'test';
+process.env.JWT_SECRET = 'test_jwt_secret';
+process.env.ERP_API_KEY = 'test_erp_api_key';
+process.env.ADMIN_GATEWAY_TOKEN = 'test_admin_gateway_token';
+process.env.ERP_MODE = 'mock';
+
 beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
   const uri = mongoServer.getUri();
@@ -16,12 +24,14 @@ beforeAll(async () => {
   process.env.NODE_ENV = 'test';
 
   await mongoose.connect(uri);
-});
+}, 45000);
 
 afterAll(async () => {
   await mongoose.disconnect();
-  await mongoServer.stop();
-});
+  if (mongoServer) {
+    await mongoServer.stop();
+  }
+}, 45000);
 
 afterEach(async () => {
   if (mongoose.connection.readyState !== 0) {

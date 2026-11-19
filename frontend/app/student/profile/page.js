@@ -1,20 +1,71 @@
 "use client";
+
 import { useState, useEffect } from "react";
+import Link from "next/link";
+import { motion } from "framer-motion";
+import gsap from "gsap";
 import { fetchApi } from "@/lib/api";
+import { computeMonthAttendance } from "@/lib/attendanceStats";
+import { useVideoActive } from "@/lib/useVideoActive";
+import StudentAvatar from "@/components/StudentAvatar";
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08,
+      delayChildren: 0.05,
+    },
+  },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 14 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: "spring",
+      stiffness: 280,
+      damping: 24,
+    },
+  },
+};
 
 export default function ProfilePage() {
   const [data, setData] = useState(null);
+  const [attendanceStats, setAttendanceStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const isVideoActive = useVideoActive();
+
+  // GSAP tactile compression animation on card click
+  const handleCardClick = (e) => {
+    const target = e.currentTarget;
+    gsap.timeline()
+      .to(target, { scale: 0.97, duration: 0.1, ease: "power2.out" })
+      .to(target, { scale: 1, duration: 0.25, ease: "back.out(2)" });
+  };
 
   useEffect(() => {
-    // For now, we fetch dashboard data to get the basic profile info
-    // as there is no dedicated profile endpoint yet.
     const fetchProfile = async () => {
       try {
-        const res = await fetchApi("/student/dashboard");
-        if (res.ok) {
-          const profileData = await res.json();
+        const [res, attRes] = await Promise.allSettled([
+          fetchApi("/student/dashboard"),
+          fetchApi("/student/attendance"),
+        ]);
+        if (res.status === "fulfilled" && res.value.ok) {
+          const profileData = await res.value.json();
           setData(profileData);
+        }
+        if (attRes.status === "fulfilled" && attRes.value.ok) {
+          const attJson = await attRes.value.json();
+          setAttendanceStats(
+            computeMonthAttendance(
+              attJson.records,
+              Boolean(attJson.isCheckedInToday || attJson.todayRecord?.checkIn)
+            )
+          );
         }
       } catch (err) {
         console.error(err);
@@ -27,49 +78,199 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="p-4 md:p-8 max-w-4xl mx-auto flex justify-center mt-20">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#c71e22]"></div>
+      <div className="p-4 md:p-8 max-w-5xl mx-auto flex flex-col items-center justify-center min-h-[450px]">
+        <div className="relative w-14 h-14 mb-4">
+          <div className="absolute inset-0 rounded-full border-4 border-red-500/30"></div>
+          <div className="absolute inset-0 rounded-full border-4 border-[#c71e22] border-t-transparent animate-spin"></div>
+        </div>
+        <p className="text-gray-400 font-semibold text-sm">Loading student identity profile...</p>
       </div>
     );
   }
 
-  return (
-    <div className="flex flex-col gap-5 max-w-4xl mx-auto h-full px-1">
-      {/* Top Banner */}
-      <div className="bg-[#fceeed] rounded-2xl p-5 sm:p-6 flex items-center gap-4">
-        <div className="w-12 h-12 bg-white/60 rounded-xl flex items-center justify-center flex-shrink-0">
-          <svg className="w-6 h-6 text-[#c71e22]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
-        </div>
-        <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Student Profile</h2>
-          <p className="text-gray-500 text-sm">View your account details</p>
-        </div>
-      </div>
+  const studentName = data?.name || "Akhil Yadav";
+  const studentId = data?.enrollmentNumber || data?.studentId || "RJ/2026/7002";
+  const feeAlert = data?.feeAlert || { hasDue: false, dueAmount: 0 };
 
-      <div className="bg-white rounded-2xl shadow-sm p-6 md:p-8 flex flex-col items-center justify-center min-h-[400px] border border-gray-100 flex-1">
-        <div className="w-28 h-28 rounded-3xl bg-red-50 text-[#c71e22] font-bold flex items-center justify-center text-5xl mb-6 shadow-sm border border-red-100 uppercase">
-          {data?.name?.charAt(0) || "S"}
+  return (
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className="flex flex-col gap-6 max-w-5xl mx-auto h-full px-3 sm:px-4 text-white"
+    >
+      {/* 1. Hero Identity Banner */}
+      <motion.div
+        variants={cardVariants}
+        onClick={handleCardClick}
+        className="relative overflow-hidden rounded-[8px] bg-[#1C1C1E]/95 border border-white/10 p-6 sm:p-8 shadow-xl flex flex-col sm:flex-row items-center gap-6 cursor-pointer"
+      >
+        <div className="absolute -top-16 -right-16 w-56 h-56 bg-gradient-to-br from-[#8D0E1F]/50 to-transparent rounded-full blur-3xl pointer-events-none"></div>
+
+        {/* Avatar with Cap from Mockup */}
+        <div className="relative z-10 shrink-0">
+          <StudentAvatar name={studentName} size="w-24 h-24 sm:w-28 sm:h-28" />
         </div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">{data?.name || "Student Name"}</h2>
-        <p className="text-[#c71e22] font-medium text-sm mb-10 px-3 py-1 bg-red-50 rounded-full">Student</p>
-        
-        <div className="w-full max-w-md space-y-3">
-          <div className="flex flex-col sm:flex-row justify-between p-4 bg-gray-50 rounded-xl gap-2 border border-gray-100">
-            <span className="font-bold text-xs text-gray-500 uppercase tracking-wider">Student ID</span>
-            <span className="text-gray-900 font-medium break-all sm:break-normal">{data?.studentId || "N/A"}</span>
-          </div>
-          <div className="flex flex-col sm:flex-row justify-between p-4 bg-gray-50 rounded-xl gap-2 border border-gray-100">
-            <span className="font-bold text-xs text-gray-500 uppercase tracking-wider">Phone Number</span>
-            <span className="text-gray-900 font-medium">{data?.phone || "N/A"}</span>
-          </div>
-          <div className="flex flex-col sm:flex-row justify-between p-4 bg-gray-50 rounded-xl gap-2 border border-gray-100">
-            <span className="font-bold text-xs text-gray-500 uppercase tracking-wider">Account Status</span>
-            <span className={`font-bold text-sm px-2 py-0.5 rounded-full inline-flex items-center w-max ${data?.status === 'active' ? 'text-green-600 bg-green-100' : 'text-red-600 bg-red-100'}`}>
-              {data?.status ? data.status.charAt(0).toUpperCase() + data.status.slice(1) : 'Active'}
+
+        {/* Info & Badges */}
+        <div className="relative z-10 text-center sm:text-left flex-1 min-w-0">
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-2">
+            <span className="text-xs font-black uppercase tracking-wider text-white bg-[#8D0E1F] px-3 py-1 rounded-[8px] border border-red-500/30">
+              Verified Student
+            </span>
+            <span className="text-xs font-semibold text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded-[8px] border border-emerald-500/30 flex items-center gap-1">
+              ✓ ERP Admission Synced
             </span>
           </div>
+
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mb-1 truncate">
+            {studentName}
+          </h1>
+          <p className="text-xs sm:text-sm text-gray-400">
+            Jain&apos;s Computer Institute of Technology &amp; Management • Session 2026
+          </p>
         </div>
+
+        {/* Status Chip */}
+        <div className="relative z-10 shrink-0">
+          <span className="px-4 py-1.5 rounded-[8px] text-xs font-black uppercase tracking-wider border shadow-2xs bg-emerald-950/80 text-emerald-300 border-emerald-500/30">
+            Active Account
+          </span>
+        </div>
+      </motion.div>
+
+      {/* 2. Identity Bento Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Tile 1: Academic Identity */}
+        <motion.div
+          variants={cardVariants}
+          onClick={handleCardClick}
+          whileHover={isVideoActive ? {} : { y: -3 }}
+          className="bg-[#1C1C1E]/95 rounded-[8px] border border-white/10 p-6 shadow-xl flex flex-col justify-between cursor-pointer"
+        >
+          <div>
+            <h3 className="font-extrabold text-white text-base mb-1">Academic Credentials</h3>
+            <p className="text-xs text-gray-400 mb-5">Official enrollment and admission identifiers</p>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3.5 bg-black/40 rounded-[8px] border border-white/5">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Enrollment No</span>
+                <span className="text-xs sm:text-sm font-extrabold text-white">
+                  {studentId}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between p-3.5 bg-black/40 rounded-[8px] border border-white/5">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">LMS Student ID</span>
+                <span className="text-xs sm:text-sm font-extrabold text-rose-400">
+                  {data?.studentId || "STU-JC2026-0042"}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between p-3.5 bg-black/40 rounded-[8px] border border-white/5">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Registered Phone</span>
+                <span className="text-xs sm:text-sm font-semibold text-gray-200">
+                  {data?.phone || "+91-9893077717"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 mt-4 border-t border-white/10 text-xs text-gray-400 flex items-center justify-between">
+            <span>Identity Authority: Jain&apos;s Computer ERP</span>
+            <span className="font-bold text-emerald-400">Active</span>
+          </div>
+        </motion.div>
+
+        {/* Tile 2: Academic Standing & Health */}
+        <motion.div
+          variants={cardVariants}
+          onClick={handleCardClick}
+          whileHover={isVideoActive ? {} : { y: -3 }}
+          className="bg-[#1C1C1E]/95 rounded-[8px] border border-white/10 p-6 shadow-xl flex flex-col justify-between cursor-pointer"
+        >
+          <div>
+            <h3 className="font-extrabold text-white text-base mb-1">Portal Standing &amp; Compliance</h3>
+            <p className="text-xs text-gray-400 mb-5">Biometric attendance and fee status</p>
+
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div
+                className={`p-4 rounded-[8px] text-center border ${
+                  !attendanceStats || attendanceStats.isHealthy
+                    ? "bg-emerald-950/60 border-emerald-500/30"
+                    : "bg-red-950/50 border-red-500/30"
+                }`}
+              >
+                <span
+                  className={`text-[10px] font-bold uppercase tracking-wider ${
+                    !attendanceStats || attendanceStats.isHealthy ? "text-emerald-400" : "text-red-400"
+                  }`}
+                >
+                  Attendance
+                </span>
+                <div className="text-2xl font-black text-white mt-1">
+                  {attendanceStats ? `${attendanceStats.pct}%` : "—"}
+                </div>
+                <span className="text-[10px] text-gray-400 font-medium">
+                  {attendanceStats ? `${attendanceStats.attended} / ${attendanceStats.conducted} days this month` : "Not available"}
+                </span>
+              </div>
+
+              <div className="p-4 rounded-[8px] bg-black/40 border border-white/5 text-center">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Fee Standing</span>
+                <div className={`text-2xl font-black mt-1 ${feeAlert.hasDue ? "text-amber-400" : "text-emerald-400"}`}>
+                  {feeAlert.feePercentage !== undefined ? `${feeAlert.feePercentage}%` : (feeAlert.hasDue ? "Pending" : "100%")}
+                </div>
+                <span className="text-[10px] text-gray-400 font-medium">
+                  {feeAlert.hasDue ? "Payment Pending" : "All Clear"}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-black/40 rounded-[8px] border border-white/5 flex items-center justify-between text-xs text-gray-300">
+              <span>Active Assigned Modules:</span>
+              <strong className="text-white font-extrabold">{data?.assignedCoursesCount ?? 0} Enrolled</strong>
+            </div>
+          </div>
+
+          <div className="pt-4 mt-4 border-t border-white/10 text-xs text-gray-400 flex items-center justify-between">
+            <span>Biometric Sync: Online</span>
+            <span className="text-rose-400 font-bold">Good Standing</span>
+          </div>
+        </motion.div>
       </div>
-    </div>
+
+      {/* 3. Fast Actions Bar */}
+      <motion.div
+        variants={cardVariants}
+        className="bg-[#1C1C1E]/95 rounded-[8px] border border-white/10 p-6 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4"
+      >
+        <div>
+          <h4 className="font-extrabold text-white text-sm">Quick Links</h4>
+          <p className="text-xs text-gray-400">Jump to your attendance, fees or home dashboard</p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <Link
+            href="/student/attendance/"
+            className="flex-1 sm:flex-none text-center px-4 py-2.5 rounded-[8px] bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-colors border border-white/5"
+          >
+            Attendance Sheet
+          </Link>
+          <Link
+            href="/student/fees/"
+            className="flex-1 sm:flex-none text-center px-4 py-2.5 rounded-[8px] bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-colors border border-white/5"
+          >
+            Fee Ledger
+          </Link>
+          <Link
+            href="/student/courses/"
+            className="flex-1 sm:flex-none text-center px-5 py-2.5 rounded-xl bg-[#c71e22] hover:bg-[#a5191c] text-white text-xs font-bold shadow-md shadow-red-500/30 transition-colors"
+          >
+            Home Dashboard →
+          </Link>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }

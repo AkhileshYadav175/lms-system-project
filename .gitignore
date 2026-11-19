@@ -48,3 +48,18 @@ backend/data/
 backend/dev-tools/*.mp4
 backend/backend_logs.txt
 backend/dev-tools/*.txt
+
+# Build output & release archives (frontend/out is the static export you upload)
+frontend/out/
+*.zip
+
+# Logs & local databases
+*.log
+data/
+mongod.log
+
+# Local scratch copies and reports
+/server
+/scratch/
+PERFORMANCE_AUDIT.md
+backend/dev-tools/

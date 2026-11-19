@@ -2,9 +2,11 @@ import express from 'express';
 import { getStudents, getStudentById, createStudent, updateStudent, deleteStudent } from '../controllers/studentController.js';
 import { getStudentCourseAccess, assignCourse, editCourseAccess, revokeCourseAccess, restoreCourseAccess, deleteCourseAccess } from '../controllers/courseAccessController.js';
 import { verifyAdmin } from '../middleware/authMiddleware.js';
+import { verifyAdminGateway } from '../middleware/adminSecurityMiddleware.js';
 
 const router = express.Router();
 
+router.use(verifyAdminGateway); // Ensure Admin Gateway token is verified
 router.use(verifyAdmin); // Protect all student routes for Admin only
 
 router.route('/')

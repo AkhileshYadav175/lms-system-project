@@ -17,10 +17,10 @@ import { fileURLToPath } from 'url';
 // Load environment variables
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../../.env'), quiet: true });
 
 // Connect to MongoDB if not connected (necessary since worker runs independently)
-if (mongoose.connection.readyState === 0) {
+if (process.env.NODE_ENV !== 'test' && mongoose.connection.readyState === 0) {
   mongoose.connect(process.env.MONGODB_URI)
     .then(() => console.log('[WORKER] Connected to MongoDB'))
     .catch(err => console.error('[WORKER ERROR] MongoDB connection failed:', err));

@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: [
   path.join(__dirname, "../../.env.local"),
   path.join(__dirname, "../../.env")
-] });
+], quiet: true });
 
 const r2Vars = [
   'R2_BUCKET_NAME',
