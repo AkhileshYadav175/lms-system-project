@@ -37,8 +37,11 @@ const allowedOrigins = [
   'http://127.0.0.1:5173',
   'https://lms-demo-mauve.vercel.app',
   'https://frontend-rose-five-24.vercel.app',
+  'https://frontend-rmvw.vercel.app',
   'https://lms.jainscomputer.com',
-  'https://www.lms.jainscomputer.com'
+  'https://www.lms.jainscomputer.com',
+  // Extra origins without a code change: ALLOWED_ORIGINS=https://a.vercel.app,https://b.com
+  ...(process.env.ALLOWED_ORIGINS || '').split(',').map((o) => o.trim().replace(/\/$/, '')),
 ].filter(Boolean);
 
 app.use(cors({
