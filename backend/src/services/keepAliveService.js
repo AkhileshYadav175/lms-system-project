@@ -1,32 +1,47 @@
 import https from 'https';
 import http from 'http';
+import mongoose from 'mongoose';
 
 export const startKeepAlive = () => {
-  // Render sets RENDER_EXTERNAL_URL automatically. 
-  // You can also set SERVER_URL manually in your .env file.
-  const serverUrl = process.env.RENDER_EXTERNAL_URL || process.env.SERVER_URL;
+  // Resolve server URL from Render, Railway, or manual SERVER_URL env
+  let serverUrl = process.env.RENDER_EXTERNAL_URL || process.env.SERVER_URL;
+
+  if (!serverUrl && process.env.RAILWAY_PUBLIC_DOMAIN) {
+    serverUrl = `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+  } else if (!serverUrl && process.env.RAILWAY_STATIC_URL) {
+    serverUrl = `https://${process.env.RAILWAY_STATIC_URL}`;
+  }
+
+  // 1. Keep MongoDB connection pool warm by pinging admin DB every 4 minutes
+  const DB_PING_INTERVAL = 4 * 60 * 1000;
+  setInterval(async () => {
+    try {
+      if (mongoose.connection && mongoose.connection.readyState === 1 && mongoose.connection.db) {
+        await mongoose.connection.db.admin().ping();
+      }
+    } catch (err) {
+      // Silently ignore ping errors
+    }
+  }, DB_PING_INTERVAL);
 
   if (!serverUrl) {
-    console.log('Keep-alive service skipped: No RENDER_EXTERNAL_URL or SERVER_URL found in env.');
+    console.log('Keep-alive HTTP ping skipped: No RENDER_EXTERNAL_URL, RAILWAY_PUBLIC_DOMAIN, or SERVER_URL found in env.');
     return;
   }
 
-  // Ping every 9 minutes (9 * 60 * 1000 milliseconds)
-  const pingInterval = 9 * 60 * 1000; 
+  // 2. Ping HTTP server every 5 minutes (prevents hosting spin-down/cold starts)
+  const pingInterval = 5 * 60 * 1000; 
 
   setInterval(() => {
     const protocol = serverUrl.startsWith('https') ? https : http;
     
     protocol.get(serverUrl, (res) => {
-      if (res.statusCode === 200) {
-        console.log(`Keep-alive ping successful at ${new Date().toLocaleString()}`);
-      } else {
-        console.log(`Keep-alive ping failed with status code: ${res.statusCode}`);
-      }
+      // Drain response stream to free sockets
+      res.resume();
     }).on('error', (err) => {
       console.error(`Keep-alive ping error: ${err.message}`);
     });
   }, pingInterval);
   
-  console.log(`Keep-alive service started, pinging ${serverUrl} every 9 minutes`);
+  console.log(`Keep-alive service active: pinging ${serverUrl} and keeping DB pool warm.`);
 };

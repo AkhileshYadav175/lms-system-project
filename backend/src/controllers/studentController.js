@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import Student from '../models/Student.js';
 import Counter from '../models/Counter.js';
 import CourseAccess from '../models/CourseAccess.js';
+import { invalidateUserSessionCache } from '../middleware/authMiddleware.js';
 
 export const getStudents = async (req, res) => {
   try {
@@ -44,7 +45,7 @@ export const createStudent = async (req, res) => {
     const sequenceNumber = String(counter.seq).padStart(3, '0');
     const studentId = `${prefix}${sequenceNumber}`;
 
-    const rawPassword = password || crypto.randomBytes(4).toString('hex');
+    const rawPassword = (password ? String(password).replace(/\s+/g, '') : '') || crypto.randomBytes(4).toString('hex');
     const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
     const student = await Student.create({
@@ -86,12 +87,15 @@ export const updateStudent = async (req, res) => {
     }
 
     if (updateData.password) {
+      updateData.password = String(updateData.password).replace(/\s+/g, '');
       updateData.plainPassword = updateData.password;
       updateData.password = await bcrypt.hash(updateData.password, 10);
     }
 
     const student = await Student.findByIdAndUpdate(id, updateData, { new: true }).select('-password');
     if (!student) return res.status(404).json({ error: 'Student not found' });
+
+    invalidateUserSessionCache(id);
 
     res.status(200).json(student);
   } catch (error) {
@@ -104,6 +108,7 @@ export const deleteStudent = async (req, res) => {
     const { id } = req.params;
     const student = await Student.findByIdAndDelete(id);
     if (!student) return res.status(404).json({ error: 'Student not found' });
+    invalidateUserSessionCache(id);
     res.status(200).json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete student' });

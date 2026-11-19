@@ -6,7 +6,19 @@ import jwt from 'jsonwebtoken';
 const router = express.Router();
 
 const extractUser = (req, res, next) => {
-  const possibleTokens = [req.cookies.admin_token, req.cookies.student_token, req.cookies.token].filter(Boolean);
+  const possibleTokens = [];
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    possibleTokens.push(authHeader.substring(7));
+  }
+  if (req.query && req.query.token) {
+    possibleTokens.push(req.query.token);
+  }
+  if (req.cookies) {
+    if (req.cookies.admin_token) possibleTokens.push(req.cookies.admin_token);
+    if (req.cookies.student_token) possibleTokens.push(req.cookies.student_token);
+    if (req.cookies.token) possibleTokens.push(req.cookies.token);
+  }
   
   for (const token of possibleTokens) {
     try {

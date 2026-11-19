@@ -83,5 +83,8 @@ const VideoSchema = new mongoose.Schema(
 );
 
 VideoSchema.index({ expiresAt: 1 });
+VideoSchema.index({ courseId: 1, createdAt: -1 });
+VideoSchema.index({ courseId: 1, order: 1 });
+VideoSchema.index({ status: 1 });
 
 export default mongoose.models.Video || mongoose.model("Video", VideoSchema);

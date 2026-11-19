@@ -1,6 +1,7 @@
 import CourseAccess from '../models/CourseAccess.js';
 import Course from '../models/Course.js';
 import Student from '../models/Student.js';
+import { invalidateCourseAccessCache } from '../services/courseAccessService.js';
 
 export const getStudentCourseAccess = async (req, res) => {
   try {
@@ -49,6 +50,8 @@ export const assignCourse = async (req, res) => {
       await student.save();
     }
 
+    invalidateCourseAccessCache(studentId, courseId);
+
     res.status(201).json(newAccess);
   } catch (error) {
     if (error.code === 11000) {
@@ -82,6 +85,8 @@ export const editCourseAccess = async (req, res) => {
     access.expiryDate = expiryDate;
     await access.save();
 
+    invalidateCourseAccessCache(studentId, access.courseId);
+
     res.status(200).json(access);
   } catch (error) {
     res.status(500).json({ error: 'Failed to edit course access' });
@@ -97,6 +102,7 @@ export const revokeCourseAccess = async (req, res) => {
       { new: true }
     );
     if (!access) return res.status(404).json({ error: 'Access record not found' });
+    invalidateCourseAccessCache(studentId, access.courseId);
     res.status(200).json(access);
   } catch (error) {
     res.status(500).json({ error: 'Failed to revoke course access' });
@@ -125,6 +131,8 @@ export const restoreCourseAccess = async (req, res) => {
     access.status = 'active';
     await access.save();
 
+    invalidateCourseAccessCache(studentId, access.courseId);
+
     res.status(200).json(access);
   } catch (error) {
     res.status(500).json({ error: 'Failed to restore course access' });
@@ -137,6 +145,8 @@ export const deleteCourseAccess = async (req, res) => {
 
     const access = await CourseAccess.findOneAndDelete({ _id: accessId, studentId });
     if (!access) return res.status(404).json({ error: 'Access record not found' });
+
+    invalidateCourseAccessCache(studentId, access.courseId);
 
     // Remove the courseId from the student's assignedCourses array to keep counts accurate
     const student = await Student.findById(studentId);

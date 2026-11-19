@@ -6,6 +6,7 @@ import { fetchApi } from "@/lib/api";
 export default function StudentLoginPage() {
   const [studentId, setStudentId] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -34,7 +35,7 @@ export default function StudentLoginPage() {
       const res = await fetchApi("/auth/student-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ studentId, password }),
+        body: JSON.stringify({ studentId: studentId.trim(), password }),
       });
       
       const data = await res.json();
@@ -79,6 +80,10 @@ export default function StudentLoginPage() {
             <input
               type="text"
               required
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              autoComplete="username"
               className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#c71e22] focus:border-transparent outline-none transition-all min-w-0 text-gray-900"
               placeholder="Enter your student ID"
               value={studentId}
@@ -88,14 +93,27 @@ export default function StudentLoginPage() {
           
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-2">Password</label>
+            <div className="relative">
             <input
-              type="password"
+              type={showPassword ? "text" : "password"}
               required
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#c71e22] focus:border-transparent outline-none transition-all min-w-0 text-gray-900"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              className="w-full px-4 py-3 pr-16 rounded-xl border border-gray-200 focus:ring-2 focus:ring-[#c71e22] focus:border-transparent outline-none transition-all min-w-0 text-gray-900"
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-[#c71e22]"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? "Hide" : "Show"}
+            </button>
+            </div>
           </div>
           
           <button

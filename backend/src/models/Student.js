@@ -42,4 +42,7 @@ const StudentSchema = new mongoose.Schema(
   }
 );
 
+StudentSchema.index({ status: 1 });
+StudentSchema.index({ createdAt: -1 });
+
 export default mongoose.models.Student || mongoose.model("Student", StudentSchema);
