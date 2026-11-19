@@ -9,6 +9,7 @@ import { fetchApi } from "@/lib/api";
 export default function StudentLoginPage() {
   const [studentId, setStudentId] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -117,14 +118,27 @@ export default function StudentLoginPage() {
             <label className="block text-xs font-bold uppercase tracking-wider text-gray-300 mb-2">
               Account Password
             </label>
+            <div className="relative">
             <input
-              type="password"
+              type={showPassword ? "text" : "password"}
               required
-              className="w-full px-4 py-3 rounded-[8px] border border-white/15 focus:ring-2 focus:ring-[#c71e22] focus:border-transparent outline-none transition-all text-sm min-w-0 text-white bg-black/50"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              className="w-full px-4 py-3 pr-16 rounded-[8px] border border-white/15 focus:ring-2 focus:ring-[#c71e22] focus:border-transparent outline-none transition-all text-sm min-w-0 text-white bg-black/50"
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-[#c71e22]"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? "Hide" : "Show"}
+            </button>
+            </div>
           </div>
           
           <button

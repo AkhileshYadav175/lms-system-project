@@ -67,7 +67,9 @@ export const getDashboardStats = async (req, res) => {
 
 export const changeAdminPassword = async (req, res) => {
   try {
-    const { currentPassword, newPassword, confirmPassword } = req.body;
+    let { currentPassword, newPassword, confirmPassword } = req.body;
+    newPassword = typeof newPassword === 'string' ? newPassword.replace(/\s+/g, '') : newPassword;
+    confirmPassword = typeof confirmPassword === 'string' ? confirmPassword.replace(/\s+/g, '') : confirmPassword;
     const adminId = req.user.userId;
 
     if (!currentPassword || !newPassword || !confirmPassword) {
@@ -87,7 +89,7 @@ export const changeAdminPassword = async (req, res) => {
       return res.status(401).json({ success: false, message: "Admin not found" });
     }
 
-    const isMatch = await bcrypt.compare(currentPassword, admin.password);
+    const isMatch = (await bcrypt.compare(currentPassword, admin.password)) || (await bcrypt.compare(String(currentPassword).replace(/\s+/g, ''), admin.password));
     if (!isMatch) {
       return res.status(400).json({ success: false, message: "Incorrect current password" }); // 400 is fine, or 401. Project uses 400 for validation errors. Wait, studentLogin uses 401 for 'Invalid credentials'.
     }

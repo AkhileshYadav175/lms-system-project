@@ -100,6 +100,7 @@ export const updateStudent = async (req, res) => {
 
     const unset = {};
     if (updateData.password) {
+      updateData.password = String(updateData.password).replace(/\s+/g, '');
       if (String(updateData.password).length < 6) {
         return res.status(400).json({ error: 'Password must be at least 6 characters' });
       }
