@@ -38,7 +38,6 @@ const allowedOrigins = [
   'https://lms-demo-mauve.vercel.app',
   'https://frontend-rose-five-24.vercel.app',
   'https://lms.jainscomputer.com',
-  'https://lmsoffline.jainscomputer.com',
   'https://www.lms.jainscomputer.com'
 ].filter(Boolean);
 
